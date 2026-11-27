@@ -405,13 +405,43 @@ class TranscriberEngine:
                 f"compute_type='{hw.recommended_compute_type}', cpu_threads={hw.recommended_cpu_threads}, "
                 f"num_workers={hw.recommended_num_workers})..."
             )
-            self.model = WhisperModel(
-                self.model_size,
-                device=ct2_device,
-                compute_type=hw.recommended_compute_type,
-                cpu_threads=hw.recommended_cpu_threads,
-                num_workers=hw.recommended_num_workers,
-            )
+            stop_mon = threading.Event()
+
+            def _monitor_hf_download():
+                import pathlib
+                hf_cache = pathlib.Path.home() / ".cache" / "huggingface" / "hub"
+                announced = False
+                last_mb = -1.0
+                while not stop_mon.wait(3.0):
+                    try:
+                        incompletes = list(hf_cache.rglob("*.incomplete")) if hf_cache.exists() else []
+                        if incompletes:
+                            newest = max(incompletes, key=lambda p: p.stat().st_mtime)
+                            mb = newest.stat().st_size / (1024.0 * 1024.0)
+                            if not announced:
+                                self._log(
+                                    f"[Model] First-time download of '{self.model_size}' weights to local cache "
+                                    f"({hf_cache})..."
+                                )
+                                announced = True
+                            if abs(mb - last_mb) >= 5.0:
+                                self._log(f"[Model] Downloading '{self.model_size}' weights: {mb:,.1f} MB cached...")
+                                last_mb = mb
+                    except Exception:
+                        pass
+
+            mon_thread = threading.Thread(target=_monitor_hf_download, daemon=True)
+            mon_thread.start()
+            try:
+                self.model = WhisperModel(
+                    self.model_size,
+                    device=ct2_device,
+                    compute_type=hw.recommended_compute_type,
+                    cpu_threads=hw.recommended_cpu_threads,
+                    num_workers=hw.recommended_num_workers,
+                )
+            finally:
+                stop_mon.set()
             if self.use_batched:
                 self.batched_pipeline = BatchedInferencePipeline(model=self.model)
 
