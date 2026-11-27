@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "audio-data-transcription-toolkit"
+version = "2.1.0"
+description = "A tool for making audio transcriptions and report summaries off audio recordings from audio (.wav, .mp3, .mp4, etc.) recordings"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Audio Data Transcription Toolkit Contributors" }
+]
+dependencies = [
+    "faster-whisper>=1.0.0",
+    "python-docx>=1.1.0",
+    "numpy>=1.24.0",
+    "av>=11.0.0",
+    "lxml>=4.9.0",
+]
+
+[project.optional-dependencies]
+amd-rocm = [
+    "torch>=2.2.0",
+    "transformers>=4.38.0",
+    "accelerate>=0.27.0",
+]
+directml = [
+    "torch-directml>=0.2.0",
+    "transformers>=4.38.0",
+]
+
+[project.scripts]
+audio-transcribe = "audio_transcriber.cli:main"
+audio-transcribe-gui = "audio_transcriber.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

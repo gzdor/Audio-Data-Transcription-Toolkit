@@ -1,0 +1,15 @@
+# Byte-compiled / cache / build
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.venv/
+
+# Large raw audio / binary arrays
+*.wav
+*.m4a
+*.mp4
+*.aac
+*.npy
