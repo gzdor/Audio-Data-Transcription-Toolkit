@@ -217,7 +217,13 @@ def enhance_audio_fast(
 
     for start in range(0, n, chunk_size):
         end = min(n, start + chunk_size)
-        x = audio[start:end].astype(np.float32, copy=False)
+        x = np.nan_to_num(
+            audio[start:end].astype(np.float32, copy=True),
+            copy=False,
+            nan=0.0,
+            posinf=1.0,
+            neginf=-1.0,
+        )
         m = len(x)
 
         if m > hp_window_samples:
@@ -540,7 +546,7 @@ class TranscriberEngine:
         output_dir: Optional[str] = None,
         output_txt_path: Optional[str] = None,
         raw_stream_path: Optional[str] = None,
-        generate_docx: bool = False,
+        generate_docx: bool = True,
         generate_srt: bool = False,
         generate_json: bool = False,
         section_speaker_fn: Optional[Callable[[float, str], Tuple[str, str]]] = None,
@@ -773,7 +779,7 @@ class TranscriberEngine:
         output_dir: Optional[str] = None,
         recursive: bool = False,
         skip_existing: bool = False,
-        generate_docx: bool = False,
+        generate_docx: bool = True,
         generate_srt: bool = False,
         generate_json: bool = False,
         telemetry_json_path: Optional[str] = None,
@@ -901,11 +907,13 @@ def transcribe_audio_file(
     device: str = "auto",
     num_workers: Optional[int] = None,
     enhance_speech: bool = False,
+    generate_docx: bool = True,
 ) -> str:
     """
     Backward-compatible single-file transcription helper.
     Runs `TranscriberEngine`, prints full per-stage timing telemetry, writes raw segments
-    to `output_stream_txt`, and returns `output_stream_txt`.
+    to `output_stream_txt`, generates the Word (.docx) executive summary report by default,
+    and returns `output_stream_txt`.
     """
     engine = TranscriberEngine(
         model_size=model_size,
@@ -924,5 +932,6 @@ def transcribe_audio_file(
     engine.transcribe_file(
         audio_path=audio_path,
         raw_stream_path=output_stream_txt,
+        generate_docx=generate_docx,
     )
     return output_stream_txt

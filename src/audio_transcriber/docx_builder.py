@@ -230,6 +230,88 @@ class MeetingReportBuilder:
         self.doc.save(output_path)
 
 
+_STOPWORDS = {
+    "the", "and", "that", "this", "with", "from", "have", "for", "not", "are", "was",
+    "were", "but", "what", "all", "when", "we're", "there", "can", "you", "your",
+    "they", "their", "about", "like", "just", "going", "know", "think", "really",
+    "would", "could", "should", "into", "some", "more", "than", "then", "them",
+    "also", "very", "because", "where", "which", "been", "being", "will", "here",
+    "yeah", "okay", "right", "well", "thing", "things", "those", "these", "much",
+    "over", "only", "other", "such", "even", "back", "after", "before", "through",
+}
+
+
+def _extract_top_keywords(texts: List[str], top_k: int = 6) -> List[str]:
+    import re
+    counts: Dict[str, int] = {}
+    for t in texts:
+        for w in re.findall(r"[A-Za-z][A-Za-z0-9\-]{2,}", t):
+            lw = w.lower()
+            if lw not in _STOPWORDS and len(lw) >= 4:
+                counts[lw] = counts.get(lw, 0) + 1
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [k for k, _ in ranked[:top_k]]
+
+
+def _extract_key_takeaways(segments: List[Dict], max_items: int = 5) -> List[Dict]:
+    """
+    Select up to `max_items` high-information representative statements spread across
+    the chronological span of the recording using TF-weighted keyword density scoring.
+    """
+    import re
+    if not segments:
+        return []
+
+    word_freq: Dict[str, int] = {}
+    for seg in segments:
+        for w in re.findall(r"[A-Za-z][A-Za-z0-9\-]{3,}", seg.get("text", "")):
+            lw = w.lower()
+            if lw not in _STOPWORDS:
+                word_freq[lw] = word_freq.get(lw, 0) + 1
+
+    if not word_freq:
+        return segments[:max_items]
+
+    scored = []
+    for idx, seg in enumerate(segments):
+        txt = seg.get("text", "").strip()
+        words = txt.split()
+        if len(words) < 7:
+            continue
+        tokens = [w.lower() for w in re.findall(r"[A-Za-z][A-Za-z0-9\-]{3,}", txt) if w.lower() not in _STOPWORDS]
+        if not tokens:
+            continue
+        score = sum(word_freq.get(t, 0) for t in set(tokens)) / (len(words) ** 0.35)
+        scored.append((score, idx, seg))
+
+    if not scored:
+        return segments[: min(max_items, len(segments))]
+
+    # Partition recording into chronological buckets so takeaways cover the whole recording
+    n_buckets = min(max_items, len(scored))
+    bucket_size = max(1, len(segments) // n_buckets)
+    selected = []
+    used_indices = set()
+    for b in range(n_buckets):
+        b_start = b * bucket_size
+        b_end = (b + 1) * bucket_size if b + 1 < n_buckets else len(segments)
+        candidates = [item for item in scored if b_start <= item[1] < b_end]
+        if candidates:
+            best = max(candidates, key=lambda x: x[0])
+            selected.append(best[2])
+            used_indices.add(best[1])
+
+    if len(selected) < max_items:
+        for score, idx, seg in sorted(scored, key=lambda x: -x[0]):
+            if idx not in used_indices:
+                selected.append(seg)
+                used_indices.add(idx)
+                if len(selected) >= max_items:
+                    break
+
+    return sorted(selected, key=lambda s: float(s.get("start", 0.0)))
+
+
 def build_auto_docx_report(
     output_docx_path: str,
     audio_path: str,
@@ -239,33 +321,84 @@ def build_auto_docx_report(
     hardware_summary: str,
 ) -> str:
     """
-    Automatically generate a formatted Word (.docx) summary & time-indexed transcript
-    report for any transcribed recording, including pipeline timing telemetry.
+    Automatically generate a formatted Word (.docx) Executive Summary & Time-Indexed
+    Conversation Report for any transcribed recording, including key takeaways,
+    section topic overview, pipeline timing telemetry, and chronological dialogue.
     """
     builder = MeetingReportBuilder()
     base_name = os.path.basename(audio_path)
     dur_sec = float(timings.get("audio_duration_sec", 0.0))
+    speech_sec = float(timings.get("speech_duration_sec", 0.0)) or dur_sec
     wall_sec = float(timings.get("total_wall_sec", 0.01))
     speedup = float(timings.get("speedup_x_rt", 0.0))
     rtf = float(timings.get("rtf", 0.0))
     total_words = sum(len(s.get("text", "").split()) for s in segments)
+    wpm = (total_words / (speech_sec / 60.0)) if speech_sec > 0 else 0.0
+    top_terms = _extract_top_keywords([s.get("text", "") for s in segments], top_k=8)
 
-    builder.add_title(f"Audio Transcription & Conversation Summary Report: {base_name}")
+    builder.add_title(f"Executive Summary & Audio Transcription Report: {base_name}")
     builder.add_subtitle(
-        f"Automated ASR Synthesis, Chronological Section Breakdown & Execution Telemetry | Generated {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        f"Automated Executive Takeaways, Topic Breakdown, Time-Indexed Transcript & Telemetry | Generated {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     )
 
     builder.add_metadata_table([
-        ("Source Audio File", f"{audio_path} ({timings.get('file_size_mb', 0.0):.2f} MB)"),
-        ("Audio Duration", f"{sec_to_hms(dur_sec)} ({dur_sec:.1f}s / {dur_sec/60.0:.1f} min)"),
-        ("Speech Activity", f"{len(segments)} segments | {len(grouped_blocks)} grouped dialogue blocks | {total_words:,} words"),
-        ("Hardware Profile", hardware_summary),
-        ("End-to-End Speed", f"Total Wall Time: {wall_sec:.2f}s | Speedup: {speedup:.1f}x Real-Time | RTF: {rtf:.4f}"),
+        ("Source Media File", f"{audio_path} ({timings.get('file_size_mb', 0.0):.2f} MB | {timings.get('container_info', 'Audio/Video')})"),
+        ("Recording Duration", f"{sec_to_hms(dur_sec)} ({dur_sec:.1f}s / {dur_sec/60.0:.1f} min) | Active Speech: {sec_to_hms(speech_sec)}"),
+        ("Speech & Pace", f"{len(segments)} segments | {len(grouped_blocks)} dialogue blocks | {total_words:,} words ({wpm:.0f} WPM)"),
+        ("Primary Topics / Terms", ", ".join(top_terms) if top_terms else "General conversation / audio recording"),
+        ("Hardware & Speed", f"{hardware_summary} | Wall Time: {wall_sec:.2f}s ({speedup:.1f}x Real-Time, RTF: {rtf:.4f})"),
     ])
 
-    builder.add_h1("1. Pipeline Execution Timing & Telemetry")
+    # Section 1: Executive Summary & Key Takeaways
+    builder.add_h1("1. Executive Summary & Key Takeaways")
+    section_groups: Dict[str, List[Dict]] = {}
+    for blk in grouped_blocks:
+        section_groups.setdefault(blk["section"], []).append(blk)
+
+    builder.add_body(
+        f"This report synthesizes the audio recording '{base_name}' spanning {sec_to_hms(dur_sec)} "
+        f"({dur_sec/60.0:.1f} minutes) with {total_words:,} transcribed words across {len(grouped_blocks)} "
+        f"grouped dialogue blocks and {len(section_groups)} chronological section(s). "
+        + (
+            f"Primary recurring themes and terminology identified across the recording include: {', '.join(top_terms)}."
+            if top_terms
+            else ""
+        )
+    )
+
+    takeaways = _extract_key_takeaways(segments, max_items=5)
+    if takeaways:
+        lead = takeaways[0]
+        builder.add_callout(
+            f"[{sec_to_hms(lead['start'])} – {sec_to_hms(lead['end'])}] \"{lead['text']}\"",
+            "KEY HIGHLIGHT FROM RECORDING",
+        )
+        builder.add_h2("Representative Highlights Across Recording")
+        for tk_seg in takeaways:
+            ts_prefix = f"[{sec_to_hms(tk_seg['start'])} – {sec_to_hms(tk_seg['end'])}] "
+            builder.add_bullet(tk_seg["text"], bold_prefix=ts_prefix)
+
+    if section_groups:
+        builder.add_h2("Chronological Section & Topic Overview")
+        sec_rows = []
+        for sec_name, blks in section_groups.items():
+            s_t0 = min(b["start"] for b in blks)
+            s_t1 = max(b["end"] for b in blks)
+            s_texts = [" ".join(b["texts"]) for b in blks]
+            s_words = sum(len(t.split()) for t in s_texts)
+            s_terms = ", ".join(_extract_top_keywords(s_texts, top_k=5)) or "General discussion"
+            sec_rows.append((sec_name, f"{sec_to_hms(s_t0)} – {sec_to_hms(s_t1)}", f"{s_words:,} words", s_terms))
+        builder.add_styled_table(
+            ["Chronological Section", "Time Window", "Volume", "Dominant Keywords / Themes"],
+            sec_rows,
+            [2.2, 1.4, 1.0, 2.2],
+            font_size_pt=9.0,
+        )
+
+    # Section 2: Pipeline Execution Timing & Telemetry
+    builder.add_h1("2. Pipeline Execution Timing & Telemetry")
     timing_rows = [
-        ("1. Audio Decode & 16 kHz Resampling", f"{timings.get('decode_sec', 0.0):.2f}s", f"{timings.get('decode_pct', 0.0):.1f}%"),
+        ("1. Media Decode & 16 kHz Resampling", f"{timings.get('decode_sec', 0.0):.2f}s", f"{timings.get('decode_pct', 0.0):.1f}%"),
         ("2. High-Pass + RMS AGC Speech Enhancement", f"{timings.get('enhance_sec', 0.0):.2f}s", f"{timings.get('enhance_pct', 0.0):.1f}%"),
         ("3. Model Initialization (Amortized)", f"{timings.get('model_load_sec', 0.0):.2f}s", f"{timings.get('model_load_pct', 0.0):.1f}%"),
         ("4. VAD + ASR Inference", f"{timings.get('inference_sec', 0.0):.2f}s", f"{timings.get('inference_pct', 0.0):.1f}%"),
@@ -279,7 +412,8 @@ def build_auto_docx_report(
         font_size_pt=9.0,
     )
 
-    builder.add_h1("2. Chronological Section Breakdown & Dialogue")
+    # Section 3: Full Time-Indexed Transcript
+    builder.add_h1("3. Chronological Section Breakdown & Full Time-Indexed Dialogue")
     current_sec = None
     for block in grouped_blocks:
         if block["section"] != current_sec:

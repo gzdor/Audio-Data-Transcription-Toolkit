@@ -1,10 +1,30 @@
-# Audio Data Transcription Toolkit
+# Audio Data Transcription Toolkit (`audio-data-transcription-toolkit`)
+
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Packaging: PEP 621](https://img.shields.io/badge/Packaging-PEP%20621%20%2F%20pyproject.toml-006699)](pyproject.toml)
+[![Hardware: CPU | CUDA | ROCm | DirectML](https://img.shields.io/badge/Hardware-Multi--CPU%20%7C%20NVIDIA%20CUDA%20%7C%20AMD%20ROCm%20%7C%20DirectML-1B365D)](#3-running-on-cpu--gpu-variants-installation--hardware-acceleration)
+[![Deliverables: .TXT | .DOCX | .SRT | .JSON](https://img.shields.io/badge/Default%20Outputs-.TXT%20%2B%20Executive%20Summary%20.DOCX-15803D)](#4-programmatic-python-api-usage)
+[![Privacy: 100% Local Offline](https://img.shields.io/badge/Privacy-100%25%20Local%20%2F%20Offline-2E7D32)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > **About:** A tool for making audio transcriptions and report summaries off audio recordings from audio (`.wav`, `.mp3`, `.mp4`, etc.) recordings.
 
-A 100% local, privacy-preserving, multi-core CPU and GPU-accelerated (**NVIDIA CUDA**, **AMD ROCm / HIP**, and **Windows DirectML**) audio and video transcription toolkit. Designed for uncompressed and broadcast `.wav` recordings (16-bit, 24-bit, and 32-bit float) as well as standard meeting video and audio formats (`.mp3`, `.mp4`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.opus`, `.wma`, `.mkv`, `.mov`, `.webm`, `.avi`), it provides far-field speech enhancement (Automatic Gain Control), stage-by-stage timing telemetry, plain-text (`.txt`) & subtitle (`.srt`) transcripts, and automated Microsoft Word (`.docx`) Executive Conversation Summary Reports.
+A 100% local, privacy-preserving, multi-core CPU and GPU-accelerated (**NVIDIA CUDA**, **AMD ROCm / HIP**, and **Windows DirectML**) audio and video transcription and executive report generation package. Out of the box, **every transcription run automatically generates both a time-indexed plain-text transcript (`<stem>-Transcript.txt`) and a formatted Microsoft Word Executive Summary & Conversation Report (`<stem>-Conversation-Report.docx`)** containing extractive key takeaways, chronological topic tables, stage-by-stage timing telemetry, and full time-indexed dialogue.
 
 ![Audio Data Transcription Toolkit GUI](docs/images/gui-screenshot.png)
+
+---
+
+## Pipeline Architecture
+
+```mermaid
+flowchart LR
+    A["Input Media<br/>(.wav, .mp3, .mp4, .m4a,<br/>.flac, .ogg, .mkv, .mov)"] --> B["Stage 1: PyAV Demux<br/>& 16 kHz Float32 Resample"]
+    B --> C["Stage 2: O(1)-RAM DSP<br/>130 Hz High-Pass +<br/>50 ms Block-RMS AGC"]
+    C --> D["Stage 3 & 4: Silero VAD +<br/>Multi-Worker CTranslate2 /<br/>PyTorch GPU Whisper ASR"]
+    D --> E["Stage 5: Regex Clean +<br/>Chronological Section &<br/>Keyword Extraction"]
+    E --> F["Stage 6: Default Outputs<br/>• Executive Summary (.docx)<br/>• Time-Indexed Transcript (.txt)<br/>• Optional .srt & .json"]
+```
 
 ---
 
@@ -15,7 +35,7 @@ A 100% local, privacy-preserving, multi-core CPU and GPU-accelerated (**NVIDIA C
 2. Click **Code → Download ZIP** on GitHub and extract the folder.
 3. Double-click **`run-gui.bat`** (or run `./run-gui.sh` on Linux/macOS).
 
-Double-clicking `run-gui.bat` opens the startup console below, verifies your Python runtime and dependencies (`faster-whisper`, `python-docx`, `av`, `numpy`, `lxml`), and launches the Desktop GUI:
+Double-clicking `run-gui.bat` opens a pure native batch console (no PowerShell execution-policy bypass scripts or silent background downloads—if packages from `requirements.txt` are missing, it asks for your confirmation before running `pip install`), and launches the Desktop GUI:
 
 ![Console splash screen opened by run-gui.bat](docs/images/run-gui-terminal.png)
 
@@ -23,7 +43,7 @@ Double-clicking `run-gui.bat` opens the startup console below, verifies your Pyt
 
 ## 1. Supported Audio & Video File Formats
 
-Through PyAV's bundled FFmpeg libraries (`libavformat`, `libavcodec`, `libswresample`), the toolkit natively decodes and resamples both audio recordings and video containers into 16 kHz mono float32 streams without requiring an external `ffmpeg` binary install:
+Through PyAV's bundled FFmpeg libraries (`libavformat`, `libavcodec`, `libswresample`), the toolkit natively decodes and resamples **23 audio and video container formats** into 16 kHz mono float32 streams without requiring an external `ffmpeg` binary install:
 
 | Category | Extensions Supported | Codec & Container Handling Details |
 | :--- | :--- | :--- |
@@ -60,6 +80,8 @@ audio-transcribe-gui --web --port 8765
 
 ## 3. Running on CPU & GPU Variants (Installation & Hardware Acceleration)
 
+> **Note:** Word (`.docx`) Executive Summary & Conversation Report generation is **ON by default** in both the CLI and Python API (pass `--no-docx` only if you want plain-text output without the `.docx` report).
+
 ### A. Multi-Core CPU Execution (Default Out-of-the-Box)
 ```bash
 pip install -r requirements.txt
@@ -69,18 +91,18 @@ pip install -e .
 - For long recordings ($\ge 4\text{ minutes}$) when `workers > 1` on CPU, the engine splits the audio array at quiet 100 ms energy minima and dispatches chunks in parallel across all workers.
 
 ```bash
-# Auto-tuned multi-worker CPU execution:
-python main.py ./recordings/ --recursive --device cpu --compute-type int8 --enhance --docx
+# Auto-tuned multi-worker CPU execution (generates both .txt transcript and .docx Executive Summary by default):
+python main.py ./recordings/ --recursive --device cpu --compute-type int8 --enhance
 
 # Explicit 4 workers x 4 threads/worker (16 physical cores):
-python main.py ./recordings/ --device cpu --workers 4 --threads 4 --batch-size 16 --enhance --docx
+python main.py ./recordings/ --device cpu --workers 4 --threads 4 --batch-size 16 --enhance
 ```
 
 ### B. NVIDIA CUDA GPU Acceleration (`--device cuda`)
 `faster-whisper` (`ctranslate2`) supports NVIDIA CUDA out of the box when NVIDIA drivers and CUDA/cuBLAS runtime libraries are installed:
 ```bash
 # Auto-detects NVIDIA GPU via CTranslate2 / nvidia-smi and selects int8_float16 or float16:
-python main.py ./recordings/meeting.mp4 --device cuda --compute-type float16 --batch-size 24 --enhance --docx
+python main.py ./recordings/meeting.mp4 --device cuda --compute-type float16 --batch-size 24 --enhance
 ```
 
 ### C. AMD ROCm / HIP GPU Acceleration on Linux (`--device rocm`)
@@ -91,13 +113,13 @@ pip install torch --index-url https://download.pytorch.org/whl/rocm6.0
 pip install -e ".[amd-rocm]"
 
 # Run on AMD ROCm GPU:
-python main.py ./recordings/meeting.wav --device rocm --compute-type float16 --enhance --docx
+python main.py ./recordings/meeting.wav --device rocm --compute-type float16 --enhance
 ```
 
 ### D. AMD / Intel GPU Acceleration on Windows via DirectML (`--device directml`)
 ```bash
 pip install -e ".[directml]"
-python main.py ./recordings/meeting.mp3 --device directml --enhance --docx
+python main.py ./recordings/meeting.mp3 --device directml --enhance
 ```
 
 ### E. Probe Hardware & Media Metadata from CLI
@@ -114,7 +136,7 @@ python main.py --probe-media ./recordings/meeting.mp4 ./recordings/clip.mp3
 ## 4. Programmatic Python API Usage
 
 ### A. Scalable Batch Transcription (`TranscriberEngine`)
-Use `TranscriberEngine` to load the Whisper model **once** in memory and process any combination of `.wav`, `.mp3`, `.mp4`, `.m4a`, `.flac`, or `.mkv` files with background producer-consumer pre-decoding:
+Use `TranscriberEngine` to load the Whisper model **once** in memory and process any combination of `.wav`, `.mp3`, `.mp4`, `.m4a`, `.flac`, or `.mkv` files with background producer-consumer pre-decoding. Both `transcribe_file()` and `transcribe_batch()` have `generate_docx=True` enabled by default:
 
 ```python
 from audio_transcriber import TranscriberEngine, detect_hardware_profile
@@ -132,11 +154,11 @@ engine = TranscriberEngine(
     mix_all_audio_streams=False,    # Set True to mix multi-track audio in .mp4/.mkv videos
 )
 
-# 3. Transcribe a single file or batch of files/directories
+# 3. Transcribe a single file or batch of files/directories (generate_docx=True by default)
 summary = engine.transcribe_batch(
     inputs=["./recordings/session1.wav", "./recordings/design_review.mp4", "./recordings/memo.mp3"],
     output_dir="./deliverables",
-    generate_docx=True,             # Generates <stem>-Conversation-Report.docx
+    generate_docx=True,             # Default True: Generates <stem>-Conversation-Report.docx with Executive Summary
     generate_srt=True,              # Generates <stem>.srt subtitles
     generate_json=True,             # Generates <stem>-Telemetry.json
     telemetry_json_path="./deliverables/batch_benchmark.json",
@@ -146,11 +168,11 @@ summary = engine.transcribe_batch(
 print(summary.format_summary_table())
 for result in summary.results:
     print(f"Transcript: {result.transcript_txt_path}")
-    print(f"Word Report: {result.docx_path}")
+    print(f"Executive Summary Word Report: {result.docx_path}")
     print(f"Speedup: {result.timings.speedup_x_rt:.1f}x RT (RTF={result.timings.rtf:.4f})")
 ```
 
-### B. Custom Word (`.docx`) Conversation Reports (`MeetingReportBuilder`)
+### B. Custom Word (`.docx`) Executive Summary Reports (`MeetingReportBuilder`)
 See [examples/custom_conversation_report_example.py](examples/custom_conversation_report_example.py) for building tailored executive summaries with metadata tables, callout boxes, chronological topic breakdowns, and action item tables:
 
 ```python
@@ -171,7 +193,21 @@ builder.save("Architecture-Sync-Report.docx")
 
 ---
 
-## 5. Per-Stage Timing & Telemetry Output
+## 5. Comparison with Equivalent & Competitor Tools
+
+| Tool / Package | 100% Local Offline | Multi-Format Video/Audio (`.mp4`, `.mp3`, 32-bit `.wav`) | Far-Field Speech AGC Pre-Filter | Automated Word (`.docx`) Executive Summary Report | Multi-CPU + CUDA + ROCm + DirectML | Desktop GUI + Web UI + Python API |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`audio-data-transcription-toolkit` (This Repo)** | **Yes** | **Yes (Bundled PyAV)** | **Yes ($O(1)$ Block-RMS AGC)** | **Yes (Default ON)** | **Yes** | **Yes (All 3)** |
+| **`faster-whisper`** (`SYSTRAN/faster-whisper`) | Yes | Yes | No | No (Library only) | CPU & CUDA only | Python API only |
+| **`WhisperX`** (`m-bain/whisperX`) | Yes (Requires HF token for pyannote) | Requires external `ffmpeg` | No | No (`.txt`/`.srt`/`.json` only) | CPU & CUDA | CLI & Python API |
+| **`Buzz`** (`chidiwilliams/buzz`) | Yes | Yes | No | No (Plain text / subtitles) | CPU & CUDA | Desktop GUI only |
+| **`Vibe`** (`thewh1teagle/vibe`) | Yes | Yes | No | No (Plain text / subtitles) | `whisper.cpp` backends | Desktop GUI only |
+| **`Insanely Fast Whisper`** | Yes | Requires external `ffmpeg` | No | No (Raw JSON output) | CUDA / MPS | CLI only |
+| **Otter.ai / Fireflies.ai** | **No (Cloud Upload)** | Yes | Cloud-side | Paid subscription export | Cloud only | Web / Mobile |
+
+---
+
+## 6. Per-Stage Timing & Telemetry Output
 
 Every CLI, GUI, and Python API run outputs a structured 6-stage timing breakdown and aggregate batch summary:
 
@@ -197,7 +233,7 @@ Every CLI, GUI, and Python API run outputs a structured 6-stage timing breakdown
 
 ---
 
-## 6. Complete CLI Reference (`python main.py` or `audio-transcribe`)
+## 7. Complete CLI Reference (`python main.py` or `audio-transcribe`)
 
 | Flag | Description |
 | :--- | :--- |
@@ -214,7 +250,7 @@ Every CLI, GUI, and Python API run outputs a structured 6-stage timing breakdown
 | `--batch-size` | Batch size for `BatchedInferencePipeline` (default: `16` on CPU, `24` on GPU) |
 | `--enhance` | Enable $O(1)$-memory High-Pass (~130 Hz) + 50 ms Block-RMS AGC for across-table / far-field voices |
 | `--mix-streams` | Mix all audio tracks when transcribing multi-track video containers (`.mp4`, `.mkv`) |
-| `--docx` | Auto-generate a formatted Word (`.docx`) Conversation Report and timing summary per file |
+| `--docx` / `--no-docx` | Auto-generate a formatted Word (`.docx`) Executive Summary & Conversation Report per file (**ON by default**; pass `--no-docx` to disable) |
 | `--srt` | Export SubRip (`.srt`) timestamps subtitle file per recording |
 | `--json` | Export per-file structured JSON transcript and stage timing breakdown |
 | `--telemetry-json` | Export aggregate batch timing benchmark JSON across all recordings |

@@ -97,8 +97,16 @@ def main():
     )
     parser.add_argument(
         "--docx",
+        dest="docx",
         action="store_true",
-        help="Automatically generate a formatted Word (.docx) conversation report & timing summary for each recording",
+        default=True,
+        help="Automatically generate a formatted Word (.docx) Executive Summary & Conversation Report for each recording (enabled by default)",
+    )
+    parser.add_argument(
+        "--no-docx",
+        dest="docx",
+        action="store_false",
+        help="Disable automatic Word (.docx) Executive Summary & Conversation Report generation",
     )
     parser.add_argument(
         "--srt",

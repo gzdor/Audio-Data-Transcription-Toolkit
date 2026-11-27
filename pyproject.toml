@@ -4,12 +4,44 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "audio-data-transcription-toolkit"
-version = "2.1.0"
+version = "2.2.0"
 description = "A tool for making audio transcriptions and report summaries off audio recordings from audio (.wav, .mp3, .mp4, etc.) recordings"
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [
     { name = "Audio Data Transcription Toolkit Contributors" }
+]
+keywords = [
+    "audio-transcription",
+    "speech-to-text",
+    "faster-whisper",
+    "whisper",
+    "executive-summary",
+    "docx-report",
+    "mp4-to-text",
+    "mp3-to-text",
+    "wav-to-text",
+    "automatic-gain-control",
+    "cuda",
+    "rocm",
+    "directml",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Office/Business",
 ]
 dependencies = [
     "faster-whisper>=1.0.0",
@@ -18,6 +50,11 @@ dependencies = [
     "av>=11.0.0",
     "lxml>=4.9.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/gzdor/Audio-Data-Transcription-Toolkit"
+Repository = "https://github.com/gzdor/Audio-Data-Transcription-Toolkit.git"
+Issues = "https://github.com/gzdor/Audio-Data-Transcription-Toolkit/issues"
 
 [project.optional-dependencies]
 amd-rocm = [
@@ -28,6 +65,9 @@ amd-rocm = [
 directml = [
     "torch-directml>=0.2.0",
     "transformers>=4.38.0",
+]
+dev = [
+    "pytest>=7.4.0",
 ]
 
 [project.scripts]

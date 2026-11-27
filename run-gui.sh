@@ -20,10 +20,19 @@ fi
 
 echo "[*] Using Python runtime: $PYTHON_BIN"
 if ! "$PYTHON_BIN" -c "import faster_whisper, docx, av, numpy, lxml" >/dev/null 2>&1; then
-    echo "[*] Installing required packages from requirements.txt..."
-    "$PYTHON_BIN" -m pip install --disable-pip-version-check -r "$SCRIPT_DIR/requirements.txt"
+    echo "[!] Missing required Python packages from requirements.txt."
+    echo "    Command: $PYTHON_BIN -m pip install -r \"$SCRIPT_DIR/requirements.txt\""
+    read -r -p "    Install required packages from requirements.txt now? [y/N]: " REPLY
+    case "$REPLY" in
+        [yY][eE][sS]|[yY])
+            "$PYTHON_BIN" -m pip install --disable-pip-version-check -r "$SCRIPT_DIR/requirements.txt"
+            ;;
+        *)
+            echo "[!] Aborted. Install dependencies manually with: pip install -r requirements.txt"
+            exit 1
+            ;;
+    esac
 fi
 
 echo "[OK] Launching Audio Data Transcription Toolkit GUI..."
 exec "$PYTHON_BIN" "$SCRIPT_DIR/gui.py" "$@"
-
