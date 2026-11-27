@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from audio_transcriber import (
     SUPPORTED_MEDIA_EXTENSIONS,
+    TranscriberEngine,
     build_auto_docx_report,
     clean_text,
     detect_hardware_profile,
@@ -139,6 +140,10 @@ class TestAudioTranscriberToolkit(unittest.TestCase):
             )
             self.assertTrue(os.path.exists(docx_out))
             self.assertGreater(os.path.getsize(docx_out), 5000)
+
+    def test_transcriber_engine_init_and_model_loader_imports(self):
+        engine = TranscriberEngine(model_size="base.en", device="cpu", compute_type="int8")
+        self.assertIsNotNone(engine.hardware)
 
 
 if __name__ == "__main__":

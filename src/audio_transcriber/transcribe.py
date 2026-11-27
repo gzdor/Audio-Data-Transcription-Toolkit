@@ -11,6 +11,7 @@ and detailed stage timing telemetry.
 
 import glob
 import os
+import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, asdict
