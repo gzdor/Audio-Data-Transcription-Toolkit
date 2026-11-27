@@ -394,10 +394,17 @@ def launch_desktop_gui(initial_files: Optional[List[str]] = None):
                     generate_json=cfg["generate_json"],
                     progress_callback=_prog_cb,
                 )
-                msg_queue.put({
-                    "kind": "done",
-                    "status": f"Completed {len(summary.results)} file(s) at {summary.overall_speedup_x_rt:.1f}x RT!",
-                })
+                if len(summary.results) == 0:
+                    msg_queue.put({
+                        "kind": "done",
+                        "status": "Failed (0 files completed — see console log)",
+                        "error": "No media files were transcribed. Check the console log for details.",
+                    })
+                else:
+                    msg_queue.put({
+                        "kind": "done",
+                        "status": f"Completed {len(summary.results)} file(s) at {summary.overall_speedup_x_rt:.1f}x RT!",
+                    })
             except Exception as e:
                 msg_queue.put({"kind": "log", "text": f"[ERROR] {e}"})
                 msg_queue.put({"kind": "done", "status": "Error", "error": str(e)})

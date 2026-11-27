@@ -68,6 +68,17 @@ class MediaProbeInfo:
         )
 
 
+def _open_media_container(media_path: str):
+    """
+    Open a media container across all PyAV versions (PyAV 10 through 16+).
+    PyAV >= 14 removed the `metadata_errors` keyword argument from `av.open()`.
+    """
+    try:
+        return av.open(media_path, metadata_errors="ignore")
+    except TypeError:
+        return av.open(media_path)
+
+
 def probe_media_file(media_path: str) -> MediaProbeInfo:
     """
     Inspect an audio or video file and return container, codec, stream counts,
@@ -79,7 +90,7 @@ def probe_media_file(media_path: str) -> MediaProbeInfo:
 
     file_size_mb = os.path.getsize(media_path) / (1024.0 * 1024.0)
     try:
-        with av.open(media_path, metadata_errors="ignore") as container:
+        with _open_media_container(media_path) as container:
             n_audio = len(container.streams.audio)
             n_video = len(container.streams.video)
             if n_audio == 0:
@@ -90,7 +101,13 @@ def probe_media_file(media_path: str) -> MediaProbeInfo:
             a_stream = container.streams.audio[0]
             codec_name = getattr(a_stream.codec_context, "name", "unknown") or "unknown"
             sr = int(getattr(a_stream.codec_context, "sample_rate", 0) or getattr(a_stream, "rate", 0) or 16000)
-            ch = int(getattr(a_stream.codec_context, "channels", 0) or 1)
+            layout_obj = getattr(a_stream.codec_context, "layout", None)
+            ch = int(
+                getattr(a_stream.codec_context, "channels", 0)
+                or getattr(layout_obj, "nb_channels", 0)
+                or (len(getattr(layout_obj, "channels", [])) if layout_obj is not None else 0)
+                or 1
+            )
             dur = float(container.duration / 1e6) if container.duration else 0.0
             if dur <= 0.0 and a_stream.duration and a_stream.time_base:
                 dur = float(a_stream.duration * a_stream.time_base)
@@ -129,6 +146,7 @@ def _decode_single_audio_stream(
 
     frames_list: List[np.ndarray] = []
     corrupt_packets = 0
+    ffmpeg_err_cls = getattr(av, "FFmpegError", Exception)
 
     try:
         for packet in container.demux(audio_stream):
@@ -138,10 +156,10 @@ def _decode_single_audio_stream(
                     for resampled in resampler.resample(frame):
                         arr = resampled.to_ndarray()
                         frames_list.append(arr.reshape(-1))
-            except av.FFmpegError:
+            except (ffmpeg_err_cls, Exception):
                 corrupt_packets += 1
                 continue
-    except av.FFmpegError:
+    except (ffmpeg_err_cls, Exception):
         # Handle truncated EOF packet gracefully if frames were already decoded
         corrupt_packets += 1
 
@@ -181,7 +199,7 @@ def load_and_resample_audio(
     total_corrupt = 0
 
     if not mix_all_audio_streams or probe.audio_streams == 1:
-        with av.open(media_path, metadata_errors="ignore") as container:
+        with _open_media_container(media_path) as container:
             audio, corrupt = _decode_single_audio_stream(
                 container, stream_index=0, sampling_rate=sampling_rate
             )
@@ -189,7 +207,7 @@ def load_and_resample_audio(
     else:
         track_arrays: List[np.ndarray] = []
         for s_idx in range(probe.audio_streams):
-            with av.open(media_path, metadata_errors="ignore") as container:
+            with _open_media_container(media_path) as container:
                 arr, corrupt = _decode_single_audio_stream(
                     container, stream_index=s_idx, sampling_rate=sampling_rate
                 )
