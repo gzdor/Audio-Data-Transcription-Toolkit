@@ -4,6 +4,7 @@
 
 A 100% local, privacy-preserving, multi-core CPU and GPU-accelerated (**NVIDIA CUDA**, **AMD ROCm / HIP**, and **Windows DirectML**) audio and video transcription toolkit. Designed for uncompressed and broadcast `.wav` recordings (16-bit, 24-bit, and 32-bit float) as well as standard meeting video and audio formats (`.mp3`, `.mp4`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.opus`, `.wma`, `.mkv`, `.mov`, `.webm`, `.avi`), it provides far-field speech enhancement (Automatic Gain Control), stage-by-stage timing telemetry, plain-text (`.txt`) & subtitle (`.srt`) transcripts, and automated Microsoft Word (`.docx`) Executive Conversation Summary Reports.
 
+![Audio Data Transcription Toolkit GUI](docs/images/gui-screenshot.png)
 
 ---
 
@@ -16,6 +17,7 @@ A 100% local, privacy-preserving, multi-core CPU and GPU-accelerated (**NVIDIA C
 
 Double-clicking `run-gui.bat` opens the startup console below, verifies your Python runtime and dependencies (`faster-whisper`, `python-docx`, `av`, `numpy`, `lxml`), and launches the Desktop GUI:
 
+![Console splash screen opened by run-gui.bat](docs/images/run-gui-terminal.png)
 
 ---
 
